@@ -1,0 +1,60 @@
+name: Set up VM and Install Tailscale
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  create_vm_and_setup_tailscale:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Clone the repository (optional if you need files)
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      # 2. Install AWS CLI
+      - name: Set up AWS CLI
+        run: |
+          curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install
+
+      # 3. Configure AWS CLI with secrets stored in GitHub
+      - name: Configure AWS CLI
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region us-east-1
+
+      # 4. Launch EC2 Instance (Change the AMI ID, instance type, etc.)
+      - name: Launch EC2 Instance
+        id: launch_instance
+        run: |
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-xxxxxxxx --count 1 --instance-type t2.micro --key-name my-key-pair --security-group-ids sg-xxxxxxxx --subnet-id subnet-xxxxxxxx --query 'Instances[0].InstanceId' --output text)
+          echo "Instance ID: $INSTANCE_ID"
+          echo "::set-output name=instance_id::$INSTANCE_ID"
+
+      # 5. Wait for EC2 Instance to be running
+      - name: Wait for EC2 Instance to be Running
+        run: |
+          aws ec2 wait instance-running --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
+
+      # 6. Install Tailscale on EC2 Instance via SSH
+      - name: Install Tailscale on EC2 Instance
+        run: |
+          # Wait for SSH to be available
+          sleep 30
+          EC2_PUBLIC_IP=$(aws ec2 describe-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          ssh -o StrictHostKeyChecking=no -i "my-key-pair.pem" ubuntu@$EC2_PUBLIC_IP << 'EOF'
+            curl -fsSL https://tailscale.com/install.sh | sh
+            sudo systemctl enable --now tailscaled
+            sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
+          EOF
+
+      # 7. Terminate the EC2 Instance after setup
+      - name: Clean up EC2 instance
+        run: |
+          aws ec2 terminate-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
+          aws ec2 wait instance-terminated --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
