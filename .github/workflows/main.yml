@@ -17,15 +17,10 @@ jobs:
       # 2. Install AWS CLI with update flag to handle existing installations
       - name: Set up AWS CLI
         run: |
-          # Download AWS CLI
           curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip awscliv2.zip
-          
-          # Remove any previous installations of AWS CLI
           sudo rm -rf /usr/local/aws
           sudo rm -rf /usr/local/bin/aws
-          
-          # Install AWS CLI with the --update flag to ensure the latest version
           sudo ./aws/install --update
 
       # 3. Configure AWS CLI with secrets stored in GitHub
@@ -51,7 +46,6 @@ jobs:
       # 6. Install Tailscale on EC2 Instance via SSH
       - name: Install Tailscale on EC2 Instance
         run: |
-          # Wait for SSH to be available
           sleep 30
           EC2_PUBLIC_IP=$(aws ec2 describe-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
           ssh -o StrictHostKeyChecking=no -i "my-key-pair.pem" ubuntu@$EC2_PUBLIC_IP << 'EOF'
