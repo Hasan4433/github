@@ -1,22 +1,69 @@
-name: Programmingwithkumaresan
+name: Setup Windows VM and Install Tailscale
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-  build:
-    name: Start Building...
+  create_vm_and_setup_tailscale:
     runs-on: windows-latest
-    timeout-minutes: 9999
-    
     steps:
-      - name: Downloading & Installing Essentials
+      # 1. Checkout the repository
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      # 2. Install AWS CLI (check if it exists, install if missing)
+      - name: Install AWS CLI
         run: |
-          Invoke-WebRequest -Uri "https://gitlab.com/chamod12/lm_win-10_github_rdp/-/raw/main/Downloads.bat" -OutFile "Downloads.bat"
-          cmd /c Downloads.bat
+          if (-Not (Get-Command aws -ErrorAction SilentlyContinue)) {
+            Write-Host "AWS CLI not found, installing..."
+            Invoke-WebRequest -Uri "https://awscli.amazonaws.com/awscli-exe-windows-x86_64.zip" -OutFile "awscliv2.zip"
+            Expand-Archive -Path "awscliv2.zip" -DestinationPath "C:\awscli"
+            C:\awscli\setup.exe
+          } else {
+            Write-Host "AWS CLI is already installed"
+          }
 
-      - name: Connect to LiteManager
-        run: cmd /c show.bat
+      # 3. Configure AWS CLI
+      - name: Configure AWS CLI with Secrets
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region us-east-1
 
-      - name: Time Counter
-        run: cmd /c loop.bat
+      # 4. Check if Tailscale is already installed, otherwise install it
+      - name: Install Tailscale
+        run: |
+          $tailscaleInstalled = Get-Command tailscale -ErrorAction SilentlyContinue
+          if (-Not $tailscaleInstalled) {
+            Write-Host "Tailscale not found, installing..."
+            Invoke-WebRequest -Uri "https://tailscale.com/download" -OutFile "tailscale_installer.exe"
+            Start-Process -FilePath "tailscale_installer.exe" -ArgumentList "/quiet" -NoNewWindow -Wait
+          } else {
+            Write-Host "Tailscale is already installed"
+          }
+
+      # 5. Set up Tailscale (only if installation was successful)
+      - name: Set up Tailscale
+        run: |
+          tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
+
+      # 6. Launch Windows EC2 Instance
+      - name: Launch Windows EC2 Instance
+        id: launch_instance
+        run: |
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-xxxxxxxx --count 1 --instance-type t2.micro --key-name my-key-pair --security-group-ids sg-xxxxxxxx --subnet-id subnet-xxxxxxxx --query 'Instances[0].InstanceId' --output text)
+          echo "Instance ID: $INSTANCE_ID"
+          echo "::set-output name=instance_id::$INSTANCE_ID"
+
+      # 7. Wait for EC2 Instance to be running
+      - name: Wait for EC2 Instance to be Running
+        run: |
+          aws ec2 wait instance-running --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
+
+      # 8. Terminate the EC2 Instance after setup
+      - name: Clean up EC2 instance
+        run: |
+          aws ec2 terminate-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
+          aws ec2 wait instance-terminated --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
