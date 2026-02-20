@@ -61,21 +61,30 @@ jobs:
           Write-Host "Installing Tailscale..."
           Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $installerPath, "/quiet", "/norestart" -NoNewWindow -Wait -ErrorAction Stop
 
-      # 5. Set up Tailscale (use the full path to tailscale.exe)
+      # 5. Find the Tailscale installation path using 'where' command
+      - name: Find Tailscale executable path
+        run: |
+          $tailscalePath = (where tailscale).Trim()
+          Write-Host "Tailscale executable found at: $tailscalePath"
+          if (-Not $tailscalePath) {
+            Write-Host "Tailscale executable not found, exiting..."
+            exit 1
+          }
+
+      # 6. Set up Tailscale using the found path
       - name: Set up Tailscale
         run: |
           Write-Host "Setting up Tailscale..."
-          $tailscalePath = "C:\Program Files\Tailscale\tailscale.exe"  # Use the full path to tailscale.exe
           & $tailscalePath up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
 
-      # 6. Restart Windows VM after Tailscale setup
+      # 7. Restart Windows VM after Tailscale setup
       - name: Restart Windows VM
         run: |
           Write-Host "Restarting the system..."
           Shutdown.exe /r /f /t 0
           Start-Sleep -Seconds 60  # Wait for the system to restart and come back up
 
-      # 7. Launch Windows EC2 Instance
+      # 8. Launch Windows EC2 Instance
       - name: Launch Windows EC2 Instance
         id: launch_instance
         run: |
@@ -83,12 +92,12 @@ jobs:
           echo "Instance ID: $INSTANCE_ID"
           echo "::set-output name=instance_id::$INSTANCE_ID"
 
-      # 8. Wait for EC2 Instance to be running
+      # 9. Wait for EC2 Instance to be running
       - name: Wait for EC2 Instance to be Running
         run: |
           aws ec2 wait instance-running --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
 
-      # 9. Clean up EC2 instance after setup
+      # 10. Clean up EC2 instance after setup
       - name: Clean up EC2 instance
         run: |
           aws ec2 terminate-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
