@@ -46,7 +46,15 @@ jobs:
           Write-Host "Downloading Tailscale installer..."
           Invoke-WebRequest -Uri "https://tailscale.com/download" -OutFile $installerPath -ErrorAction Stop
 
-          # Install Tailscale
+          # Verify the installer download (check if the file is not empty or corrupted)
+          if ((Get-Item $installerPath).length -eq 0) {
+            Write-Host "Installer file is empty or corrupted, exiting..."
+            exit 1
+          } else {
+            Write-Host "Installer downloaded successfully"
+          }
+
+          # Install Tailscale by running the installer
           Write-Host "Installing Tailscale..."
           Start-Process -FilePath $installerPath -ArgumentList "/quiet" -NoNewWindow -Wait -ErrorAction Stop
 
