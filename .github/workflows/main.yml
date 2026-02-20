@@ -61,11 +61,12 @@ jobs:
           Write-Host "Installing Tailscale..."
           Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $installerPath, "/quiet", "/norestart" -NoNewWindow -Wait -ErrorAction Stop
 
-      # 5. Set up Tailscale
+      # 5. Set up Tailscale (use the full path to tailscale.exe)
       - name: Set up Tailscale
         run: |
           Write-Host "Setting up Tailscale..."
-          tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
+          $tailscalePath = "C:\Program Files\Tailscale\tailscale.exe"  # Use the full path to tailscale.exe
+          & $tailscalePath up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
 
       # 6. Restart Windows VM after Tailscale setup
       - name: Restart Windows VM
