@@ -42,9 +42,12 @@ jobs:
             Remove-Item $installerPath
           }
 
-          # Download the installer
-          Write-Host "Downloading Tailscale installer..."
-          Invoke-WebRequest -Uri "https://tailscale.com/download" -OutFile $installerPath -ErrorAction Stop
+          # Direct URL for Tailscale installer download
+          $tailscaleUrl = "https://pkgs.tailscale.com/stable/tailscale-1.30.0-x64.msi"  # Tailscale MSI file URL for Windows
+
+          # Download the installer from the Tailscale site
+          Write-Host "Downloading Tailscale installer from $tailscaleUrl"
+          Invoke-WebRequest -Uri $tailscaleUrl -OutFile $installerPath -ErrorAction Stop
 
           # Verify the installer download (check if the file is not empty or corrupted)
           if ((Get-Item $installerPath).length -eq 0) {
@@ -54,9 +57,9 @@ jobs:
             Write-Host "Installer downloaded successfully"
           }
 
-          # Install Tailscale by running the installer
+          # Install Tailscale by running the MSI installer
           Write-Host "Installing Tailscale..."
-          Start-Process -FilePath $installerPath -ArgumentList "/quiet" -NoNewWindow -Wait -ErrorAction Stop
+          Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $installerPath, "/quiet", "/norestart" -NoNewWindow -Wait -ErrorAction Stop
 
       # 5. Set up Tailscale
       - name: Set up Tailscale
