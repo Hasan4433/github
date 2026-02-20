@@ -32,24 +32,24 @@ jobs:
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws configure set default.region us-east-1
 
-      # 4. Install Tailscale using curl from GitHub Releases
-      - name: Install Tailscale
+      # 4. Install Tailscale using a specific release URL from GitHub
+      - name: Install Tailscale from GitHub
         run: |
+          # Set the installer path
           $installerPath = "tailscale_installer.msi"
-          # Check if installer exists and remove it if it does
+
+          # Remove any existing installer file
           if (Test-Path $installerPath) {
-            Write-Host "Removing old installer..."
+            Write-Host "Removing previous installer..."
             Remove-Item $installerPath
           }
 
-          # GitHub Releases direct URL for Tailscale MSI file
-          $tailscaleUrl = "https://github.com/tailscale/tailscale/releases/download/v1.30.0/tailscale-1.30.0-x64.msi"  # Correct URL for Windows MSI file
-
-          # Download the installer using curl
+          # Download the Tailscale installer directly from GitHub repository
+          $tailscaleUrl = "https://github.com/e23awais/tailscale/releases/download/v1.30.0/tailscale-1.30.0-x64.msi"
           Write-Host "Downloading Tailscale installer from GitHub: $tailscaleUrl"
           curl -L $tailscaleUrl -o $installerPath
 
-          # Verify the installer download (check if the file is not empty or corrupted)
+          # Verify if the installer was downloaded correctly
           if ((Get-Item $installerPath).length -eq 0) {
             Write-Host "Installer file is empty or corrupted, exiting..."
             exit 1
