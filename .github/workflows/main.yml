@@ -61,18 +61,23 @@ jobs:
           Write-Host "Installing Tailscale..."
           Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $installerPath, "/quiet", "/norestart" -NoNewWindow -Wait -ErrorAction Stop
 
-      # 5. Check if Tailscale is installed at the default path
+      # 5. Check if Tailscale exists at default path
       - name: Check if Tailscale exists at default path
         run: |
           $tailscalePath = "C:\Program Files\Tailscale\tailscale.exe"
           if (Test-Path $tailscalePath) {
             Write-Host "Tailscale found at $tailscalePath"
           } else {
-            Write-Host "Tailscale not found at the default path. Trying 'where tailscale'."
+            Write-Host "Tailscale not found at the default path."
+            # Use 'where tailscale' to find the correct path
             $tailscalePath = (where tailscale).Trim()
+
+            # If tailscale is not found, stop the process
             if (-Not $tailscalePath) {
-              Write-Host "Tailscale executable not found anywhere, exiting..."
+              Write-Host "Tailscale executable not found, exiting..."
               exit 1
+            } else {
+              Write-Host "Tailscale found at: $tailscalePath"
             }
           }
 
