@@ -32,24 +32,38 @@ jobs:
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws configure set default.region us-east-1
 
-      # 4. Check if Tailscale is already installed, otherwise install it
+      # 4. Install Tailscale if not already installed
       - name: Install Tailscale
         run: |
-          $tailscaleInstalled = Get-Command tailscale -ErrorAction SilentlyContinue
-          if (-Not $tailscaleInstalled) {
-            Write-Host "Tailscale not found, installing..."
-            Invoke-WebRequest -Uri "https://tailscale.com/download" -OutFile "tailscale_installer.exe"
-            Start-Process -FilePath "tailscale_installer.exe" -ArgumentList "/quiet" -NoNewWindow -Wait
-          } else {
-            Write-Host "Tailscale is already installed"
+          $installerPath = "tailscale_installer.exe"
+          # Check if installer exists and remove it if it does
+          if (Test-Path $installerPath) {
+            Write-Host "Removing old installer..."
+            Remove-Item $installerPath
           }
 
-      # 5. Set up Tailscale (only if installation was successful)
+          # Download the installer
+          Write-Host "Downloading Tailscale installer..."
+          Invoke-WebRequest -Uri "https://tailscale.com/download" -OutFile $installerPath -ErrorAction Stop
+
+          # Install Tailscale
+          Write-Host "Installing Tailscale..."
+          Start-Process -FilePath $installerPath -ArgumentList "/quiet" -NoNewWindow -Wait -ErrorAction Stop
+
+      # 5. Set up Tailscale
       - name: Set up Tailscale
         run: |
+          Write-Host "Setting up Tailscale..."
           tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
 
-      # 6. Launch Windows EC2 Instance
+      # 6. Restart Windows VM after Tailscale setup
+      - name: Restart Windows VM
+        run: |
+          Write-Host "Restarting the system..."
+          Shutdown.exe /r /f /t 0
+          Start-Sleep -Seconds 60  # Wait for the system to restart and come back up
+
+      # 7. Launch Windows EC2 Instance
       - name: Launch Windows EC2 Instance
         id: launch_instance
         run: |
@@ -57,12 +71,12 @@ jobs:
           echo "Instance ID: $INSTANCE_ID"
           echo "::set-output name=instance_id::$INSTANCE_ID"
 
-      # 7. Wait for EC2 Instance to be running
+      # 8. Wait for EC2 Instance to be running
       - name: Wait for EC2 Instance to be Running
         run: |
           aws ec2 wait instance-running --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
 
-      # 8. Terminate the EC2 Instance after setup
+      # 9. Clean up EC2 instance after setup
       - name: Clean up EC2 instance
         run: |
           aws ec2 terminate-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
