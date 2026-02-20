@@ -32,7 +32,7 @@ jobs:
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws configure set default.region us-east-1
 
-      # 4. Install Tailscale using GitHub Release URL
+      # 4. Install Tailscale from GitHub Releases
       - name: Install Tailscale
         run: |
           $installerPath = "tailscale_installer.msi"
@@ -42,8 +42,8 @@ jobs:
             Remove-Item $installerPath
           }
 
-          # GitHub Release direct URL for Tailscale MSI file (Windows)
-          $tailscaleUrl = "https://github.com/tailscale/tailscale/releases/download/v1.30.0/tailscale-1.30.0-x64.msi"  # URL of the MSI installer for Windows
+          # GitHub Releases direct URL for Tailscale MSI file
+          $tailscaleUrl = "https://github.com/tailscale/tailscale/releases/download/v1.30.0/tailscale-1.30.0-x64.msi"  # Correct URL for Windows MSI file
 
           # Download the installer from GitHub
           Write-Host "Downloading Tailscale installer from GitHub: $tailscaleUrl"
