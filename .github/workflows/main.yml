@@ -7,59 +7,87 @@ on:
 
 jobs:
   create_vm_and_setup_tailscale:
-    runs-on: ubuntu-latest
-
+    runs-on: windows-latest
     steps:
-      # 1. Clone the repository (optional if you need files)
+      # 1. Checkout the repository
       - name: Check out repository
         uses: actions/checkout@v2
 
-      # 2. Install AWS CLI
-      - name: Set up AWS CLI
+      # 2. Install AWS CLI (check if it exists, install if missing)
+      - name: Install AWS CLI
         run: |
-          curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo rm -rf /usr/local/aws
-          sudo rm -rf /usr/local/bin/aws
-          sudo ./aws/install --update
+          if (-Not (Get-Command aws -ErrorAction SilentlyContinue)) {
+            Write-Host "AWS CLI not found, installing..."
+            Invoke-WebRequest -Uri "https://awscli.amazonaws.com/awscli-exe-windows-x86_64.zip" -OutFile "awscliv2.zip"
+            Expand-Archive -Path "awscliv2.zip" -DestinationPath "C:\awscli"
+            C:\awscli\setup.exe
+          } else {
+            Write-Host "AWS CLI is already installed"
+          }
 
-      # 3. Configure AWS CLI with secrets
-      - name: Configure AWS CLI
+      # 3. Configure AWS CLI
+      - name: Configure AWS CLI with Secrets
         run: |
           aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws configure set default.region us-east-1
 
-      # 4. Launch Windows EC2 Instance
+      # 4. Install Tailscale using GitHub Release URL
+      - name: Install Tailscale
+        run: |
+          $installerPath = "tailscale_installer.msi"
+          # Check if installer exists and remove it if it does
+          if (Test-Path $installerPath) {
+            Write-Host "Removing old installer..."
+            Remove-Item $installerPath
+          }
+
+          # GitHub Release direct URL for Tailscale MSI file (Windows)
+          $tailscaleUrl = "https://github.com/tailscale/tailscale/releases/download/v1.30.0/tailscale-1.30.0-x64.msi"  # URL of the MSI installer for Windows
+
+          # Download the installer from GitHub
+          Write-Host "Downloading Tailscale installer from GitHub: $tailscaleUrl"
+          Invoke-WebRequest -Uri $tailscaleUrl -OutFile $installerPath -ErrorAction Stop
+
+          # Verify the installer download (check if the file is not empty or corrupted)
+          if ((Get-Item $installerPath).length -eq 0) {
+            Write-Host "Installer file is empty or corrupted, exiting..."
+            exit 1
+          } else {
+            Write-Host "Installer downloaded successfully"
+          }
+
+          # Install Tailscale using msiexec for better compatibility
+          Write-Host "Installing Tailscale..."
+          Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $installerPath, "/quiet", "/norestart" -NoNewWindow -Wait -ErrorAction Stop
+
+      # 5. Set up Tailscale
+      - name: Set up Tailscale
+        run: |
+          Write-Host "Setting up Tailscale..."
+          tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
+
+      # 6. Restart Windows VM after Tailscale setup
+      - name: Restart Windows VM
+        run: |
+          Write-Host "Restarting the system..."
+          Shutdown.exe /r /f /t 0
+          Start-Sleep -Seconds 60  # Wait for the system to restart and come back up
+
+      # 7. Launch Windows EC2 Instance
       - name: Launch Windows EC2 Instance
         id: launch_instance
         run: |
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-xxxxxxxx --count 1 --instance-type t2.micro --key-name my-key-pair --security-group-ids sg-xxxxxxxx --subnet-id subnet-xxxxxxxx --user-data file://setup-windows.sh --query 'Instances[0].InstanceId' --output text)
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-xxxxxxxx --count 1 --instance-type t2.micro --key-name my-key-pair --security-group-ids sg-xxxxxxxx --subnet-id subnet-xxxxxxxx --query 'Instances[0].InstanceId' --output text)
           echo "Instance ID: $INSTANCE_ID"
           echo "::set-output name=instance_id::$INSTANCE_ID"
 
-      # 5. Wait for EC2 Instance to be running
+      # 8. Wait for EC2 Instance to be running
       - name: Wait for EC2 Instance to be Running
         run: |
           aws ec2 wait instance-running --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
 
-      # 6. Install Tailscale on Windows EC2 Instance (via RDP)
-      - name: Install Tailscale on Windows EC2 Instance
-        run: |
-          # Wait for the RDP to be available
-          sleep 60
-          EC2_PUBLIC_IP=$(aws ec2 describe-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
-
-          # Use RDP for installation of Tailscale (ensure RDP is configured)
-          # For this example, you would typically use an RDP tool or WinRM to automate installation
-          # Here, we're just simulating the installation of Tailscale via SSH as an example.
-          ssh -o StrictHostKeyChecking=no -i "my-key-pair.pem" ubuntu@$EC2_PUBLIC_IP << 'EOF'
-            curl -fsSL https://tailscale.com/install.sh | sh
-            sudo systemctl enable --now tailscaled
-            sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
-          EOF
-
-      # 7. Terminate the EC2 Instance after setup
+      # 9. Clean up EC2 instance after setup
       - name: Clean up EC2 instance
         run: |
           aws ec2 terminate-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
